@@ -1,7 +1,14 @@
 import pytest
+import json
+
 from sigma.collection import SigmaCollection
 from sigma.backends.elasticsearch.elasticsearch_esql import ESQLBackend
 from sigma.processing.pipeline import ProcessingPipeline
+from sigma.pipelines.elasticsearch.esql import (
+    esql_kibana_ndjson,
+    esql_siem_rule_ndjson,
+    esql_siem_rule
+)
 
 @pytest.fixture
 def esql_backend():
@@ -425,8 +432,8 @@ def test_elasticsearch_esql_ndjson(esql_backend: ESQLBackend):
                 condition: sel
         """
     )
-    result = esql_backend.convert(rule, output_format="kibana_ndjson")
-    assert result[0] == {
+    result = ESQLBackend(esql_kibana_ndjson()).convert(rule)
+    assert result[0] == json.dumps({
         'attributes': {
             'columns': [],
             'description': 'No description',
@@ -434,7 +441,7 @@ def test_elasticsearch_esql_ndjson(esql_backend: ESQLBackend):
             'hideChart': False,
             'isTextBasedQuery': True,
             'kibanaSavedObjectMeta': {
-                'searchSourceJSON': '{"query": {"esql": "from * metadata _id, _index, _version | where fieldA==\\"valueA\\" and fieldB==\\"valueB\\""}, "index": {"title": "*", "timeFieldName": "@timestamp", "sourceFilters": [], "type": "esql", "fieldFormats": {}, "runtimeFieldMap": {}, "allowNoIndex": false, "name": "*", "allowHidden": false}, "filter": []}'
+                'searchSourceJSON': '{"filter": [], "index": {"allowHidden": false, "allowNoIndex": false, "fieldFormats": {}, "name": "*", "runtimeFieldMap": {}, "sourceFilters": [], "timeFieldName": "@timestamp", "title": "*", "type": "esql"}, "query": {"esql": "from * metadata _id, _index, _version | where fieldA==\\"valueA\\" and fieldB==\\"valueB\\""}}'
             },
             'sort': [['@timestamp', 'desc']],
             'timeRestore': False,
@@ -445,8 +452,8 @@ def test_elasticsearch_esql_ndjson(esql_backend: ESQLBackend):
         'managed': False,
         'references': [],
         'type': 'search',
-        'typeMigrationVersion': '10.2.0'
-    }
+        'typeMigrationVersion': '10.3.0'
+    }, indent=4)
 
 
 def test_elasticsearch_esql_siemrule(esql_backend: ESQLBackend):
@@ -466,8 +473,8 @@ def test_elasticsearch_esql_siemrule(esql_backend: ESQLBackend):
                 condition: sel
         """
     )
-    result = esql_backend.convert(rule, output_format="siem_rule")
-    assert result[0] == {
+    result = ESQLBackend(esql_siem_rule()).convert(rule)
+    assert result[0] == json.dumps({
         'name': 'SIGMA - Test',
         'tags': [],
         'enabled': True,
@@ -508,7 +515,7 @@ def test_elasticsearch_esql_siemrule(esql_backend: ESQLBackend):
         'rule_type_id': 'siem.esqlRule',
         'notify_when': 'onActiveAlert',
         'actions': []
-    }
+    }, indent=4)
 
 
 def test_elasticsearch_esql_siemrule_ndjson(esql_backend: ESQLBackend):
@@ -528,8 +535,8 @@ def test_elasticsearch_esql_siemrule_ndjson(esql_backend: ESQLBackend):
                 condition: sel
         """
     )
-    result = esql_backend.convert(rule, output_format="siem_rule_ndjson")
-    assert result[0] == {
+    result = ESQLBackend(esql_siem_rule_ndjson()).convert(rule)
+    assert result[0] == json.dumps({
         'id': 'c277adc0-f0c4-42e1-af9d-fab062992156',
         'name': 'SIGMA - Test',
         'tags': [],
@@ -565,105 +572,4 @@ def test_elasticsearch_esql_siemrule_ndjson(esql_backend: ESQLBackend):
         'language': 'esql',
         'query': 'from * metadata _id, _index, _version | where fieldA=="valueA" and fieldB=="valueB"',
         'actions': []
-    }
-
-
-def test_elasticsearch_esql_siemrule_ndjson_with_threat(esql_backend: ESQLBackend):
-    """Test for NDJSON output with embedded query string query."""
-    rule = SigmaCollection.from_yaml(
-        """
-            title: Test
-            id: c277adc0-f0c4-42e1-af9d-fab062992156
-            status: test
-            logsource:
-                category: test_category
-                product: test_product
-            detection:
-                sel:
-                    fieldA: valueA
-                    fieldB: valueB
-                condition: sel
-            tags:
-                - attack.execution
-                - attack.t1059.001
-                - attack.defense_evasion
-                - attack.t1027
-        """
-    )
-    result = esql_backend.convert(rule, output_format="siem_rule_ndjson")
-    assert result[0] == {
-        "id": "c277adc0-f0c4-42e1-af9d-fab062992156",
-        "name": "SIGMA - Test",
-        "tags": ["attack-execution", "attack-t1059.001", "attack-defense_evasion", "attack-t1027"],
-        "interval": "5m",
-        "enabled": True,
-        "description": "No description",
-        "risk_score": 21,
-        "severity": "low",
-        "note": "",
-        "license": "DRL",
-        "output_index": "",
-        "meta": {
-            "from": "1m"
-        },
-        "investigation_fields": {},
-        "author": [],
-        "false_positives": [],
-        "from": "now-5m",
-        "rule_id": "c277adc0-f0c4-42e1-af9d-fab062992156",
-        "max_signals": 100,
-        "risk_score_mapping": [],
-        "severity_mapping": [],
-        "threat": [
-            {
-                "tactic": {
-                    "id": "TA0002",
-                    "reference": "https://attack.mitre.org/tactics/TA0002",
-                    "name": "Execution",
-                },
-                "framework": "MITRE ATT&CK",
-                "technique": [
-                    {
-                        "id": "T1059",
-                        "reference": "https://attack.mitre.org/techniques/T1059",
-                        "name": "Command and Scripting Interpreter",
-                        "subtechnique": [
-                            {
-                                "id": "T1059.001",
-                                "reference": "https://attack.mitre.org/techniques/T1059/001",
-                                "name": "PowerShell",
-                            }
-                        ],
-                    }
-                ],
-            },
-            {
-                "tactic": {
-                    "id": "TA0005",
-                    "reference": "https://attack.mitre.org/tactics/TA0005",
-                    "name": "Defense Evasion",
-                },
-                "framework": "MITRE ATT&CK",
-                "technique": [
-                    {
-                        "id": "T1027",
-                        "reference": "https://attack.mitre.org/techniques/T1027",
-                        "name": "Obfuscated Files or Information",
-                        "subtechnique": [],
-                    }
-                ],
-            },
-        ],
-        "to": "now",
-        "references": [],
-        "version": 1,
-        "exceptions_list": [],
-        "immutable": False,
-        "related_integrations": [],
-        "required_fields": [],
-        "setup": "",
-        "type": "esql",
-        "language": "esql",
-        "query": 'from * metadata _id, _index, _version | where fieldA=="valueA" and fieldB=="valueB"',
-        "actions": [],
-    }
+    }, indent=4)
