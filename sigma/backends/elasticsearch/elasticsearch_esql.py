@@ -1,7 +1,6 @@
 from sigma.conversion.deferred import DeferredQueryExpression
 from sigma.conversion.state import ConversionState
 from sigma.rule import SigmaRule, SigmaRuleTag
-from sigma.correlations import SigmaCorrelationRule
 from sigma.conversion.base import TextQueryBackend
 from sigma.conditions import ConditionItem, ConditionAND, ConditionOR, ConditionNOT
 from sigma.types import SigmaCompareExpression
@@ -123,7 +122,7 @@ class ESQLBackend(TextQueryBackend):
     temporal_correlation_query: ClassVar[str] = {"stats": "{search}\n{typing}\n{aggregate}\n{condition}"}
 
     correlation_search_single_rule_expression: ClassVar[str] = "{query}"
-    correlation_search_multi_rule_expression: ClassVar[str] = "from {sources} | where {queries}"
+    correlation_search_multi_rule_expression: ClassVar[str] = "{queries}"
     correlation_search_multi_rule_query_expression: ClassVar[
         str
     ] = '({query})'
@@ -213,37 +212,20 @@ class ESQLBackend(TextQueryBackend):
         
         return ",".join(indices)
 
-    def convert_correlation_search(
-        self,
-        rule: SigmaCorrelationRule,
-        **kwargs,
-    ) -> str:
-        sources = self.preprocess_indices([
+    def finalize_query(self, rule: SigmaRule, query: Union[str, DeferredQueryExpression], index: int, state: ConversionState, output_format: str) -> Union[str, DeferredQueryExpression]:
+        # If set, load the index from the processing state
+        index_state = state.processing_state.get("index", self.state_defaults["index"]) if isinstance(rule, SigmaRule) else [
             state.processing_state.get("index", self.state_defaults["index"])
             for rule_reference in rule.rules
             for state in rule_reference.rule.get_conversion_states()
-        ])
-
-        return super().convert_correlation_search(rule, sources=sources, **kwargs)
-
-    def convert_correlation_search_multi_rule_query_postprocess(self, query: str) -> str:
-        return query.split(" | where ")[1]
-    
-    def convert_correlation_typing_query_postprocess(self, query: str) -> str:
-        return self.convert_correlation_search_multi_rule_query_postprocess(query)
-
-    ### Correlation end ###
-
-    def finalize_query(self, rule: SigmaRule, query: Union[str, DeferredQueryExpression], index: int, state: ConversionState, output_format: str) -> Union[str, DeferredQueryExpression]:
-        # If set, load the index from the processing state
-        index_state = state.processing_state.get("index", self.state_defaults["index"])
+        ]
         # If the non-default index is not a string, preprocess it
         if not isinstance(index_state, str):
             index_state = self.preprocess_indices(index_state)
 
         # Save the processed index back to the processing state
         state.processing_state["index"] = index_state
-        return  super().finalize_query(rule, query, index, state, output_format)
+        return super().finalize_query(rule, query, index, state, output_format)
 
     def finalize_query_kibana_ndjson(
         self, rule: SigmaRule, query: str, index: int, state: ConversionState
